@@ -13,7 +13,9 @@ Kubernetes The Hard Way is optimized for learning, which means taking the long r
 
 ## Target Audience
 
-The target audience for this tutorial is someone planning to support a production Kubernetes cluster and wants to understand how everything fits together.
+Original version of this tutorial: the target audience for this tutorial is someone planning to support a production Kubernetes cluster and wants to understand how everything fits together.
+
+This version of the tutorial: the target audience for this tutorial is someone exploring a path to implementing Anthos with a hand installed Kubernetes cluster. For my purposes I am using a local linux workstation as an on-premises cluster to integrate.
 
 ## Cluster Details
 
