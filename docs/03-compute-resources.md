@@ -1,8 +1,8 @@
 # Provisioning Compute Resources
 
-Kubernetes requires a set of machines to host the Kubernetes control plane and the worker nodes where containers are ultimately run. In this lab you will provision the compute resources required for running a secure and highly available Kubernetes cluster across a single [compute zone](https://cloud.google.com/compute/docs/regions-zones/regions-zones).
+Kubernetes requires a set of machines to host the Kubernetes control plane and the worker nodes where containers are ultimately run. In this lab you will provision the compute resources required for running a secure and highly available Kubernetes cluster on your local machine. In cloud terms this is akin to establishing a cluster in a single [compute zone](https://cloud.google.com/compute/docs/regions-zones/regions-zones). Of course hihgly available is relative as you are running on a single machine likely sitting on or under your desk susceptible to typical interruptions like residential power failure, a latte spill, or a young child tugging on a cord. 
 
-> Ensure a default compute zone and region have been set as described in the [Prerequisites](01-prerequisites.md#set-a-default-compute-region-and-zone) lab.
+We have chosen to use qemu on top of kvm for hypervisor and libvirt for management as these are readily supported by our chosen desktop distro.
 
 ## Networking
 
@@ -10,29 +10,47 @@ The Kubernetes [networking model](https://kubernetes.io/docs/concepts/cluster-ad
 
 > Setting up network policies is out of scope for this tutorial.
 
-### Virtual Private Cloud Network
+### Virtual Private Local Network
 
-In this section a dedicated [Virtual Private Cloud](https://cloud.google.com/compute/docs/networks-and-firewalls#networks) (VPC) network will be setup to host the Kubernetes cluster.
+In this section a virtual network will be created to host the Kubernetes cluster.
 
-Create the `kubernetes-the-hard-way` custom VPC network:
+Create the `anthos-network.xml` file that defines the attributes of our network:
+```
+<network>
+  <name>anthos</name>
+  <bridge name="virbr240"/>
+  <ip address="10.240.0.1" netmask="255.255.255.0">
+    <dhcp>
+      <range start="10.240.0.1" end="10.240.0.254"/>
+    </dhcp>
+  </ip>
+</network>
+```
+This XML configuration establishes a subnet suitable for 254 addressable compute nodes, provides dhcp services within the network, and defines the interface for NAT and route services.
+
+Next we will create, mark for autostart, and start the `anthos` virtual network the following:
 
 ```
-gcloud compute networks create kubernetes-the-hard-way --subnet-mode custom
+virsh net-define ./anthos-network.xml
+virsh net-autostart anthos
+virsh net-start anthos
+```
+You can verify the state of your network configurations and that the `anthos` network is running with:
+
+```
+virsh net-list --all
 ```
 
-A [subnet](https://cloud.google.com/compute/docs/vpc/#vpc_networks_and_subnets) must be provisioned with an IP address range large enough to assign a private IP address to each node in the Kubernetes cluster.
-
-Create the `kubernetes` subnet in the `kubernetes-the-hard-way` VPC network:
+Should you need to completely stop and remove a network you can use the following commands:
 
 ```
-gcloud compute networks subnets create kubernetes \
-  --network kubernetes-the-hard-way \
-  --range 10.240.0.0/24
+virsh net-destroy anthos
+virsh net-undefine anthos
 ```
 
-> The `10.240.0.0/24` IP address range can host up to 254 compute instances.
+### Firewall and Network Filtering Rules
 
-### Firewall Rules
+TODO: what firewall/filtering rules do we want to implement? Reference: https://libvirt.org/firewall.html
 
 Create a firewall rule that allows internal communication across all protocols:
 
@@ -70,25 +88,12 @@ kubernetes-the-hard-way-allow-internal  kubernetes-the-hard-way  INGRESS    1000
 
 ### Kubernetes Public IP Address
 
-Allocate a static IP address that will be attached to the external load balancer fronting the Kubernetes API Servers:
+Our goal here is to allocate a hostname that will be attached to the external load balancer fronting the Kubernetes API Servers. Since we want the API servers to be reachable from the control plane in GCP we will need to attach a forwarding rule to our home router, utilize portmapping if we have more than a single "DMZ" server, and for ease of configuration utilize a Dynamic DNS solution to provide a consistent host name for our configuration (TODO: verify if ACM can use a hostname). Note that the target for your home router will be your host machine, not your VM. On your host then you will define forwarding rules again to route traffic to the API Server running on the Anthos network we defined above. Tricky stuff for sure, but so long as you approach this in logical steps you will be just fine.
 
-```
-gcloud compute addresses create kubernetes-the-hard-way \
-  --region $(gcloud config get-value compute/region)
-```
+As this process will vary by provider and type of service, I am documenting my setup with an expectation that you can manage this effort using the various resources at your disposal from your ISP and or the larger community.
 
-Verify the `kubernetes-the-hard-way` static IP address was created in your default compute region:
+TODO: document how to get this done:
 
-```
-gcloud compute addresses list --filter="name=('kubernetes-the-hard-way')"
-```
-
-> output
-
-```
-NAME                     REGION    ADDRESS        STATUS
-kubernetes-the-hard-way  us-west1  XX.XXX.XXX.XX  RESERVED
-```
 
 ## Compute Instances
 
